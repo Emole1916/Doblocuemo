@@ -2,21 +2,47 @@
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
-    <title>Pro 3D Drift - Jeep Renegade</title>
+    <title>Pro Drift - GLB City Edition</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <style>
-        body { margin: 0; overflow: hidden; background: #050505; touch-action: none; font-family: sans-serif; }
-        #hud { position: fixed; top: 20px; left: 20px; color: #fff; z-index: 5; background: rgba(0,0,0,0.6); padding: 15px; border-radius: 10px; border-left: 5px solid #00ffcc; }
-        #controls { position: fixed; bottom: 30px; left: 0; right: 0; display: flex; justify-content: space-around; z-index: 5; pointer-events: none; }
-        .btn { width: 75px; height: 75px; border-radius: 50%; background: rgba(255,255,255,0.1); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 25px; border: 2px solid #00ffcc; pointer-events: auto; user-select: none; }
-        .btn:active { background: #00ffcc; color: #000; }
+        body { margin: 0; overflow: hidden; background: #020205; font-family: 'Segoe UI', sans-serif; }
+        #upload-screen {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: radial-gradient(circle, #1a1a2e 0%, #000 100%);
+            z-index: 100; display: flex; flex-direction: column; align-items: center; justify-content: center;
+            color: white; text-align: center;
+        }
+        .upload-label {
+            background: #ff0055; color: #fff; padding: 15px 40px; border-radius: 50px;
+            font-weight: bold; cursor: pointer; border: none; font-size: 20px; transition: 0.3s;
+            box-shadow: 0 0 20px rgba(255, 0, 85, 0.5);
+        }
+        .upload-label:hover { transform: scale(1.1); background: #ff2e74; }
+        #hud { position: fixed; top: 20px; left: 20px; color: #fff; z-index: 5; background: rgba(0,0,0,0.8); 
+               padding: 15px; border-radius: 12px; border-left: 5px solid #ff0055; display: none; min-width: 120px; }
+        #controls { position: fixed; bottom: 30px; left: 0; right: 0; display: none; justify-content: space-around; z-index: 5; pointer-events: none; }
+        .btn { width: 75px; height: 75px; border-radius: 50%; background: rgba(255,255,255,0.05); 
+               color: #fff; display: flex; align-items: center; justify-content: center; 
+               font-size: 30px; border: 2px solid rgba(255, 0, 85, 0.4); pointer-events: auto; user-select: none; }
+        .btn:active { background: #ff0055; }
     </style>
 </head>
 <body>
 
+<div id="upload-screen">
+    <h1 style="letter-spacing: 5px;">NEON DRIFT</h1>
+    <p>Devam etmek için <b>.glb</b> uzantılı araç modelini seçin</p>
+    <label class="upload-label">
+        MODELİ SEÇ <input type="file" id="fileInput" accept=".glb" style="display:none">
+    </label>
+</div>
+
 <div id="hud">
-    VİTES: <span id="gear" style="color:#00ffcc; font-weight:bold;">D</span><br>
-    HIZ: <span id="speed" style="font-size:22px;">0</span> <small>km/h</small>
+    <small>HIZ</small><br>
+    <span id="speed" style="font-size: 32px; font-weight: bold; color: #ff0055;">0</span> <small>km/h</small><br>
+    <div style="margin-top:5px; border-top:1px solid #333; padding-top:5px;">
+        VİTES: <span id="gear" style="font-weight: bold;">D</span>
+    </div>
 </div>
 
 <div id="controls">
@@ -27,132 +53,136 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/three@0.158/build/three.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.158/examples/js/loaders/OBJLoader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.158/examples/js/loaders/GLTFLoader.js"></script>
 
 <script>
-// ===== SAHNE AYARLARI =====
-const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x050510);
-scene.fog = new THREE.Fog(0x050510, 150, 1200);
+let scene, camera, renderer, carGroup, isLoaded = false;
+let speed = 0, gear = "D", keys = { w:0, s:0, a:0, d:0 };
 
-const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 3000);
-const renderer = new THREE.WebGLRenderer({ antialias: true });
-renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.shadowMap.enabled = true;
-document.body.appendChild(renderer.domElement);
-
-// ===== IŞIKLANDIRMA =====
-scene.add(new THREE.AmbientLight(0xffffff, 0.4));
-const sun = new THREE.DirectionalLight(0xffffff, 1);
-sun.position.set(100, 200, 100);
-sun.castShadow = true;
-scene.add(sun);
-
-// ===== GELİŞMİŞ ŞEHİR HARİTASI =====
-const roadGeo = new THREE.PlaneGeometry(3000, 3000);
-const roadMat = new THREE.MeshStandardMaterial({ color: 0x111111 });
-const ground = new THREE.Mesh(roadGeo, roadMat);
-ground.rotation.x = -Math.PI / 2;
-ground.receiveShadow = true;
-scene.add(ground);
-
-// Izgara ve Yol Çizgileri
-const grid = new THREE.GridHelper(3000, 100, 0x00ffcc, 0x222222);
-grid.position.y = 0.05;
-scene.add(grid);
-
-// Binalar
-const box = new THREE.BoxGeometry(1, 1, 1);
-for(let i=0; i<250; i++) {
-    const h = 20 + Math.random() * 70;
-    const w = 15 + Math.random() * 10;
-    const building = new THREE.Mesh(box, new THREE.MeshStandardMaterial({ color: 0x1a1a2e }));
-    building.scale.set(w, h, w);
-    building.position.set((Math.random()-0.5)*1800, h/2, (Math.random()-0.5)*1800);
-    if(Math.abs(building.position.x) < 25) building.position.x += 50;
-    building.castShadow = true;
-    scene.add(building);
-}
-
-// ===== JEEP YÜKLEME (OBJ) =====
-const carGroup = new THREE.Group();
-scene.add(carGroup);
-
-const objLoader = new THREE.OBJLoader();
-// Yeni yüklediğin dosya adı
-objLoader.load('Jeep_Renegade_2016.obj', (object) => {
-    // OBJ modelleri genelde farklı ölçeklerde gelir, gerekirse 1,1,1 yapabilirsin
-    object.scale.set(3, 3, 3); 
-    
-    // Modelin merkezlenmesi ve yönü
-    object.rotation.y = Math.PI; 
-    
-    object.traverse(child => {
-        if(child.isMesh) {
-            child.castShadow = true;
-            child.receiveShadow = true;
-            // Model kaplamasız gelirse diye varsayılan bir renk
-            child.material = new THREE.MeshStandardMaterial({ color: 0x555555 });
-        }
-    });
-    carGroup.add(object);
-    console.log("Jeep Başarıyla Yüklendi!");
-}, (xhr) => {
-    console.log((xhr.loaded / xhr.total * 100) + '% yüklendi');
-}, (err) => {
-    console.error("Yükleme hatası!", err);
+document.getElementById('fileInput').addEventListener('change', function(e) {
+    const file = e.target.files[0];
+    if (file) {
+        const url = URL.createObjectURL(file);
+        initGame(url);
+        document.getElementById('upload-screen').style.display = 'none';
+        document.getElementById('hud').style.display = 'block';
+        document.getElementById('controls').style.display = 'flex';
+    }
 });
 
-// ===== FİZİK MOTORU =====
-let speed = 0, gear = "D";
-const keys = { w:0, s:0, a:0, d:0 };
+function initGame(modelUrl) {
+    // Sahne ve Sis
+    scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x020205);
+    scene.fog = new THREE.Fog(0x020205, 50, 800);
 
-// Kontroller
+    camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 2000);
+    renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.toneMapping = THREE.ACESFilmicToneMapping; // Daha gerçekçi renkler
+    document.body.appendChild(renderer.domElement);
+
+    // Işıklandırma
+    const ambient = new THREE.AmbientLight(0xffffff, 0.3);
+    scene.add(ambient);
+    
+    const neonLight = new THREE.PointLight(0xff0055, 2, 500);
+    neonLight.position.set(0, 100, 0);
+    scene.add(neonLight);
+
+    // --- GELİŞMİŞ HARİTA ---
+    // 1. Yol (Asfalt)
+    const roadGeo = new THREE.PlaneGeometry(3000, 3000);
+    const roadMat = new THREE.MeshStandardMaterial({ color: 0x0a0a0a, roughness: 0.8 });
+    const road = new THREE.Mesh(roadGeo, roadMat);
+    road.rotation.x = -Math.PI / 2;
+    scene.add(road);
+
+    // 2. Neon Grid (Zemin Izgarası)
+    const grid = new THREE.GridHelper(3000, 60, 0xff0055, 0x222222);
+    grid.position.y = 0.05;
+    scene.add(grid);
+
+    // 3. Gökdelenler
+    const boxGeo = new THREE.BoxGeometry(1, 1, 1);
+    for(let i=0; i<400; i++) {
+        const h = 30 + Math.random() * 120;
+        const w = 20 + Math.random() * 15;
+        const b = new THREE.Mesh(boxGeo, new THREE.MeshStandardMaterial({ color: 0x050510 }));
+        b.scale.set(w, h, w);
+        b.position.set((Math.random()-0.5)*1800, h/2, (Math.random()-0.5)*1800);
+        
+        // Yolu açık tut
+        if(Math.abs(b.position.x) < 40) b.position.x += (b.position.x > 0 ? 60 : -60);
+        scene.add(b);
+    }
+
+    // --- GLB MODEL YÜKLEME ---
+    carGroup = new THREE.Group();
+    const loader = new THREE.GLTFLoader();
+    loader.load(modelUrl, (gltf) => {
+        const model = gltf.scene;
+        
+        // Model boyutunu ayarla (Model çok küçük veya büyükse burayı değiştir)
+        model.scale.set(2.5, 2.5, 2.5); 
+        model.rotation.y = Math.PI; // Öne bakması için
+        
+        carGroup.add(model);
+        scene.add(carGroup);
+        isLoaded = true;
+        animate();
+    });
+}
+
+// --- FİZİK MOTORU ---
+function update() {
+    if(keys.w) speed += (gear === "D" ? 0.015 : -0.012);
+    if(keys.s) speed *= 0.93; // Frenleme gücü
+    speed *= 0.985; // Sürtünme
+
+    const turnSpeed = 0.045 * (Math.abs(speed) > 0.01 ? 1 : 0);
+    if(keys.a) carGroup.rotation.y += turnSpeed * (speed >= 0 ? 1 : -1);
+    if(keys.d) carGroup.rotation.y -= turnSpeed * (speed >= 0 ? 1 : -1);
+
+    carGroup.position.x -= Math.sin(carGroup.rotation.y) * speed * 18;
+    carGroup.position.z -= Math.cos(carGroup.rotation.y) * speed * 18;
+
+    // Dinamik Kamera (Esnek takip)
+    const targetCamX = carGroup.position.x + Math.sin(carGroup.rotation.y) * 55;
+    const targetCamZ = carGroup.position.z + Math.cos(carGroup.rotation.y) * 55;
+    camera.position.lerp(new THREE.Vector3(targetCamX, 22, targetCamZ), 0.1);
+    camera.lookAt(carGroup.position);
+
+    // UI Güncelle
+    document.getElementById('speed').innerText = Math.abs(speed * 220).toFixed(0);
+    document.getElementById('gear').innerText = gear;
+}
+
+// --- KONTROLLER ---
 window.onkeydown = (e) => {
     const k = e.key.toLowerCase();
-    if(k === 'w') keys.w = 1; if(k === 's') keys.s = 1;
-    if(k === 'a') keys.a = 1; if(k === 'd') keys.d = 1;
-    if(e.key === ' ') { gear = gear === "D" ? "R" : "D"; document.getElementById('gear').innerText = gear; }
+    if(k==='w') keys.w=1; if(k==='s') keys.s=1;
+    if(k==='a') keys.a=1; if(k==='d') keys.d=1;
+    if(e.key===' ') gear = gear === "D" ? "R" : "D";
 };
 window.onkeyup = (e) => {
     const k = e.key.toLowerCase();
-    if(k === 'w') keys.w = 0; if(k === 's') keys.s = 0;
-    if(k === 'a') keys.a = 0; if(k === 'd') keys.d = 0;
+    if(k==='w') keys.w=0; if(k==='s') keys.s=0;
+    if(k==='a') keys.a=0; if(k==='d') keys.d=0;
 };
 
-// Mobil Buton Bağlantıları
+// Mobil Buton Fonksiyonları
 const setupBtn = (id, key) => {
-    const b = document.getElementById(id);
-    b.ontouchstart = (e) => { e.preventDefault(); keys[key] = 1; };
-    b.ontouchend = () => keys[key] = 0;
-};
-setupBtn('gas', 'w'); setupBtn('brake', 's'); setupBtn('left', 'a'); setupBtn('right', 'd');
+    const el = document.getElementById(id);
+    el.ontouchstart = (e) => { e.preventDefault(); keys[key]=1; };
+    el.ontouchend = () => keys[key]=0;
+}
+setupBtn('gas','w'); setupBtn('brake','s'); setupBtn('left','a'); setupBtn('right','d');
 
-// ===== OYUN DÖNGÜSÜ =====
-function loop() {
-    requestAnimationFrame(loop);
-
-    // Hareket Mantığı
-    if(keys.w) speed += (gear === "D" ? 0.01 : -0.008);
-    if(keys.s) speed *= 0.9; // Fren
-    speed *= 0.97; // Sürtünme
-
-    const turn = 0.035 * (Math.abs(speed) > 0.02 ? 1 : 0);
-    if(keys.a) carGroup.rotation.y += turn * (speed >= 0 ? 1 : -1);
-    if(keys.d) carGroup.rotation.y -= turn * (speed >= 0 ? 1 : -1);
-
-    carGroup.position.x -= Math.sin(carGroup.rotation.y) * speed * 15;
-    carGroup.position.z -= Math.cos(carGroup.rotation.y) * speed * 15;
-
-    // Kamera Takibi
-    const camX = carGroup.position.x + Math.sin(carGroup.rotation.y) * 50;
-    const camZ = carGroup.position.z + Math.cos(carGroup.rotation.y) * 50;
-    camera.position.lerp(new THREE.Vector3(camX, 25, camZ), 0.1);
-    camera.lookAt(carGroup.position);
-
-    // HUD
-    document.getElementById('speed').innerText = Math.abs(speed * 150).toFixed(0);
-
+function animate() {
+    requestAnimationFrame(animate);
+    if(isLoaded) update();
     renderer.render(scene, camera);
 }
 
@@ -161,8 +191,6 @@ window.onresize = () => {
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
 };
-
-loop();
 </script>
 </body>
 </html>
